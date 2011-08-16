@@ -12,31 +12,10 @@ possible to get information about the languages that were influenced by a given
 one, and the ones that influenced this language. The `influences/get_influences.py`
 script generates a tree of those languages and can output a nice graph for you.
 
-With the command line::
+To generate the graph::
 
-    $ python get_influences.py python
-    python
-     > Boo
-     > Cobra
-     > D
-     > Falcon
-     > Groovy
-     > Ruby
-      > Groovy
-      > Nu
-      > Falcon
-      > Ioke
-      > Mirah
-     > JavaScript
-     < Boo
-     < Cobra
-     < D
-     < Falcon
-     < Groovy
-     < Ruby
-      < Groovy
-      < Nu
-      < Falcon
-      < Ioke
-      < Mirah
-     < JavaScript
+    $ python influences/get_influences.py python dot | dot -Tpng > influences.png
+
+Which generates the following picture:
+
+.. image:: http://files.lolnet.org/alexis/influences.png

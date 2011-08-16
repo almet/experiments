@@ -1,3 +1,7 @@
+from collections import defaultdict
+import time
+import sys
+
 import rdflib
 from rdflib import plugin
 
@@ -7,22 +11,46 @@ plugin.register('sparql', rdflib.query.Processor,
 plugin.register('sparql', rdflib.query.Result,
                 'rdfextras.sparql.query', 'SPARQLQueryResult')
 
+# List of parsed information
+LANGUAGES_INFO = {}
+LANGUAGES_OBJECTS = {'asc': {}, 'desc': {}}
+
 class Lang(object):
     def __init__(self, name):
         self.name = name
         self.influenced = []
         self.influenced_by = []
     
-    def __repr__(self, level=1):
-        def _print(char, elem):
-            return "\n" + " " * level + char + " %s" % elem.__repr__(level + 1)
+    @property
+    def name_(self):
+        return self.name.replace("+", "p").replace("-", "m").replace("#", "sharp")\
+                .replace("/", "").replace(" ", "")
 
-        repr = self.name
+    def __repr__(self):
+        return "<Lang %s>" % self.name
+
+    def as_dot(self):
+        """Return a dot representation from this node"""
+        return "digraph %s {\n%s\n }" % (self.name, self._dotgraph())
+
+    def _dotgraph(self, parsed=None):
+        if parsed is None:
+            parsed = {'inf': {}, 'infBy': {}}
+
+        string = ""
         for elem in self.influenced:
-            repr = repr + _print(">", elem)
+            string = string + "%s -> %s;\n" % (self.name, elem.name_)
+            if not elem.name in parsed['inf']:
+                parsed['inf'][elem.name] = elem
+                string = string + elem._dotgraph(parsed)
+
         for elem in self.influenced_by:
-            repr = repr + _print("<", elem)
-        return repr
+            string = string + "%s -> %s;\n" % (elem.name_, self.name_)
+            if not elem.name in parsed['infBy']:
+                parsed['infBy'][elem.name] = elem
+                string = string + elem._dotgraph(parsed)
+
+        return string 
 
 
 def get_related(language):
@@ -43,42 +71,52 @@ def get_related(language):
             result = _run_query_on(language + "_%28programming_language%29", False)
         return result
 
-    language = language.capitalize() # wikipedia names are capitalized
-    influenced, influenced_by = None, None
-    result = _run_query_on(language)
+    def _query_dbpedia(language):
+        language = language.capitalize() # wikipedia names are capitalized
+        result, influenced, influenced_by = None, None, None
 
-    if result:
-        influenced = result[0][0].split(", ")
-        influenced_by = result[0][0].split(", ")
+        try:
+            result = _run_query_on(language)
+        except: # sometimes dbpedia issue a 500 for unknown reasons, wait a bit
+            time.sleep(1)
+            try:
+                result = _run_query_on(language)
+            except:
+                pass
 
-    return (influenced or [], influenced_by or [])
+        if result:
+            influenced = result[0][0].split(", ")
+            influenced_by = result[0][1].split(", ")
 
+        return (influenced or [], influenced_by or [])
+    
+    # Don't issue the same request twice
+    if language not in LANGUAGES_INFO:
+        LANGUAGES_INFO[language] = _query_dbpedia(language)
+    return LANGUAGES_INFO[language]
 
-def get_tree(name, desc=None, asc=None):
+def get_tree(name, direction="both"):
     """Build the tree given a language name and a direction.
 
-    :name:
-        the language name to look for
-
-    :desc:
-        Try to find the languages that have been influenced by this one (descending
-        order)
-
-    :asc:
-        Try to find the languages that have influenced this one (ascending order)
+    :name: the language name to look for
+    :oder: parsing desc or asc? (or both)
     """
 
-    # We are the root element if neither desc and asc are set
-    is_root = desc is None and asc is None
+    # do not parse the same thing twice
+    if direction != "both":
+        if name in LANGUAGES_OBJECTS[direction]:
+            return LANGUAGES_OBJECTS[direction][name]
 
     elem = Lang(name)
     inf, inf_by = get_related(name)
+    
+    if direction == "desc" or direction == "both":
+        LANGUAGES_OBJECTS["desc"][name] = elem
+        elem.influenced = [get_tree(lang, "desc") for lang in inf]
 
-    if desc or is_root:
-        elem.influenced = [get_tree(lang, desc=True) for lang in inf]
-
-    if asc or is_root:
-        elem.influenced_by = [get_tree(lang, asc=True) for lang in inf_by]
+    if direction == "asc" or direction == "both":
+        LANGUAGES_OBJECTS["asc"][name] = elem
+        elem.influenced_by = [get_tree(lang, "asc") for lang in inf_by]
 
     return elem
 
@@ -86,5 +124,9 @@ if __name__ == "__main__":
     import sys
     if len(sys.argv) < 2:
         print "error: please specify a language to search for"
-    else:
-        print get_tree(sys.argv[1])
+    elif (len(sys.argv) == 2):
+        # passing only a lang will print a scheme for it
+        print get_tree(sys.argv[1]).as_text()
+    elif (len(sys.argv) == 3) and sys.argv[2] == "dot":
+        # return a dot string
+        print get_tree(sys.argv[1]).as_dot()
