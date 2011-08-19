@@ -19,3 +19,17 @@ To generate the graph::
 Which generates the following picture:
 
 .. image:: http://files.lolnet.org/alexis/influences.png
+
+Playing with nginx logfiles
+===========================
+
+I was wondering what the traffic on the different websites I have was, and thus
+made a little script to extract informaton from nginx logs.
+
+You can find it on `nginxgraph.py`. To use it::
+
+    $ python nginxgraph.py nginx-access.log other-logfile.log
+
+And it will generate some nice stuff for you:
+
+.. image:: http://files.lolnet.org/alexis/nginxlog.png
